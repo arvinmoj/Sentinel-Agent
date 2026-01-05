@@ -1,0 +1,333 @@
+{
+  "name": "XRP/USDT Trading Bot - 30m Timeframe",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/30 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.mexc.com/api/v3/klines",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "XRPUSDT"
+            },
+            {
+              "name": "interval",
+              "value": "30m"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-klines",
+      "name": "Fetch MEXC Klines",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Transform MEXC klines to candles format\nconst klines = $input.all()[0].json;\nconst candles = klines.map(k => ({\n  timestamp: new Date(k[0]).toISOString(),\n  timestampMs: k[0],\n  open: parseFloat(k[1]),\n  high: parseFloat(k[2]),\n  low: parseFloat(k[3]),\n  close: parseFloat(k[4]),\n  volume: parseFloat(k[5])\n}));\n\nreturn [{ json: { candles } }];"
+      },
+      "id": "transform-klines",
+      "name": "Transform Klines",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Import strategy and risk modules (requires NODE_FUNCTION_ALLOW_EXTERNAL)\nconst { analyzeMarket, detectCandlePatterns } = require('./strategy');\nconst { calculateDynamicRisk, validateRiskParameters } = require('./risk');\n\n// Get candles from previous node\nconst candles = $input.all()[0].json.candles;\n\n// Analyze market\nconst signal = analyzeMarket(candles);\nconst patterns = detectCandlePatterns(candles, 3);\n\n// Calculate risk if signal is actionable\nlet riskParams = null;\nlet riskValidation = null;\n\nif (signal.signal !== 'HOLD') {\n  riskParams = calculateDynamicRisk(signal, candles);\n  riskValidation = validateRiskParameters(riskParams);\n}\n\n// Return formatted data\nreturn [{\n  json: {\n    signal: signal.signal,\n    confidence: signal.confidence,\n    indicators: signal.indicators,\n    trend: signal.trend,\n    currentPrice: signal.currentPrice,\n    patterns: patterns,\n    tradeParams: riskParams,\n    riskValidation: riskValidation,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "analyze-strategy",
+      "name": "Analyze Strategy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DIFY_BASE_URL || 'https://api.dify.ai/v1' }}/chat-messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "difyApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.DIFY_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=Analyze this XRP/USDT trading signal:\n- Signal: {{ $json.signal }}\n- Confidence: {{ $json.confidence }}%\n- Trend: {{ $json.trend }}\n- RSI: {{ $json.indicators.rsi }}\n- EMA9: {{ $json.indicators.ema9 }}\n- EMA21: {{ $json.indicators.ema21 }}\n- Patterns: {{ $json.patterns.map(p => p.type).join(', ') || 'None' }}\n- Current Price: {{ $json.currentPrice }}\n\nShould I execute this trade? Consider market conditions and provide risk assessment."
+            },
+            {
+              "name": "user",
+              "value": "sentinel-agent-bot"
+            },
+            {
+              "name": "response_mode",
+              "value": "blocking"
+            },
+            {
+              "name": "inputs",
+              "value": "{}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dify-analysis",
+      "name": "Dify AI Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "combineOperation": "all"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Analyze Strategy').item.json.signal }}",
+              "rightValue": "HOLD",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "leftValue": "={{ $('Analyze Strategy').item.json.confidence }}",
+              "rightValue": 60,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "leftValue": "={{ $('Analyze Strategy').item.json.riskValidation?.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-conditions",
+      "name": "Check Trade Conditions",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mexc.com/api/v3/order",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "XRPUSDT"
+            },
+            {
+              "name": "side",
+              "value": "={{ $('Analyze Strategy').item.json.signal }}"
+            },
+            {
+              "name": "type",
+              "value": "MARKET"
+            },
+            {
+              "name": "quantity",
+              "value": "={{ $('Analyze Strategy').item.json.tradeParams.quantity }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ Date.now() }}"
+            },
+            {
+              "name": "signature",
+              "value": "={{ $jmespath($item(0).json, \"signature\") }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MEXC-APIKEY",
+              "value": "={{ $env.MEXC_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "place-order",
+      "name": "Place MEXC Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Log trade execution details\nconst strategy = $('Analyze Strategy').item.json;\nconst order = $input.all()[0].json;\n\nconsole.log('=== TRADE EXECUTED ===');\nconsole.log('Signal:', strategy.signal);\nconsole.log('Entry:', strategy.tradeParams.entry);\nconsole.log('Stop Loss:', strategy.tradeParams.stopLoss);\nconsole.log('Take Profit:', strategy.tradeParams.takeProfit);\nconsole.log('Quantity:', strategy.tradeParams.quantity);\nconsole.log('Order ID:', order.orderId);\n\nreturn [{\n  json: {\n    success: true,\n    signal: strategy.signal,\n    orderId: order.orderId,\n    entry: strategy.tradeParams.entry,\n    stopLoss: strategy.tradeParams.stopLoss,\n    takeProfit: strategy.tradeParams.takeProfit,\n    quantity: strategy.tradeParams.quantity,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "log-execution",
+      "name": "Log Execution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Log no trade condition\nconst strategy = $('Analyze Strategy').item.json;\n\nconsole.log('=== NO TRADE ===');\nconsole.log('Signal:', strategy.signal);\nconsole.log('Confidence:', strategy.confidence);\nconsole.log('Reason: Conditions not met');\n\nreturn [{\n  json: {\n    success: false,\n    signal: strategy.signal,\n    confidence: strategy.confidence,\n    reason: 'Trade conditions not met',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "log-no-trade",
+      "name": "Log No Trade",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 400]
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch MEXC Klines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch MEXC Klines": {
+      "main": [
+        [
+          {
+            "node": "Transform Klines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Klines": {
+      "main": [
+        [
+          {
+            "node": "Analyze Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Strategy": {
+      "main": [
+        [
+          {
+            "node": "Dify AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dify AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Check Trade Conditions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Trade Conditions": {
+      "main": [
+        [
+          {
+            "node": "Place MEXC Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log No Trade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Place MEXC Order": {
+      "main": [
+        [
+          {
+            "node": "Log Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-01-05T00:00:00.000Z",
+  "versionId": "1"
+}

@@ -1,0 +1,33 @@
+# Environment Variables
+.env
+.env.local
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test Data
+tests/data/*.csv
+tests/data/*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Build
+dist/
+build/
+
+# Backup files
+*.backup
+*.bak

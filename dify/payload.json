@@ -1,0 +1,68 @@
+{
+  "templateName": "XRP/USDT Trading Signal Analysis",
+  "description": "Payload template for Dify.ai API to analyze trading signals with LLM",
+  "endpoint": "https://api.dify.ai/v1/chat-messages",
+  "method": "POST",
+  "headers": {
+    "Authorization": "Bearer {DIFY_API_KEY}",
+    "Content-Type": "application/json"
+  },
+  "payload": {
+    "query": "You are an expert cryptocurrency trader analyzing XRP/USDT on a 30-minute timeframe. Review the following technical data and provide a comprehensive trading recommendation:\n\n**Technical Indicators:**\n- Trading Signal: {signal}\n- Confidence Level: {confidence}%\n- Market Trend: {trend}\n- RSI(14): {rsi}\n- EMA(9): {ema9}\n- EMA(21): {ema21}\n- EMA Crossover: {crossover}\n\n**Current Market State:**\n- Current Price: {currentPrice} USDT\n- Recent Candle Patterns: {candlePatterns}\n\n**Proposed Trade Parameters:**\n- Entry Price: {entry} USDT\n- Stop Loss: {stopLoss} USDT ({stopLossPercent}%)\n- Take Profit: {takeProfit} USDT ({takeProfitPercent}%)\n- Risk/Reward Ratio: 1:{riskRewardRatio}\n- Position Size: {quantity} XRP ({positionSizeUSDT} USDT)\n- Risk Amount: {riskAmount} USDT\n- Potential Profit: {potentialProfit} USDT\n\n**Risk Validation:**\n- Risk Parameters Valid: {riskValid}\n- Validation Notes: {riskReasons}\n\n**Analysis Request:**\n1. Evaluate the strength of this trading signal based on the technical indicators\n2. Assess whether the risk/reward ratio is favorable\n3. Identify any potential risks or concerns with this setup\n4. Provide a clear recommendation: EXECUTE, SKIP, or WAIT\n5. If recommending EXECUTE, suggest any adjustments to stop-loss or take-profit levels\n6. Rate your confidence in this recommendation (1-10)\n\nProvide a concise analysis in 3-4 sentences, followed by your final recommendation.",
+    "user": "sentinel-agent-bot",
+    "response_mode": "blocking",
+    "inputs": {},
+    "conversation_id": "",
+    "auto_generate_name": true
+  },
+  "variables": {
+    "signal": "{{signal}}",
+    "confidence": "{{confidence}}",
+    "trend": "{{trend}}",
+    "rsi": "{{indicators.rsi}}",
+    "ema9": "{{indicators.ema9}}",
+    "ema21": "{{indicators.ema21}}",
+    "crossover": "{{crossover.bullish ? 'Bullish' : crossover.bearish ? 'Bearish' : 'None'}}",
+    "currentPrice": "{{currentPrice}}",
+    "candlePatterns": "{{patterns.map(p => p.type).join(', ') || 'None detected'}}",
+    "entry": "{{tradeParams.entry}}",
+    "stopLoss": "{{tradeParams.stopLoss}}",
+    "stopLossPercent": "{{tradeParams.stopLossPercent}}",
+    "takeProfit": "{{tradeParams.takeProfit}}",
+    "takeProfitPercent": "{{tradeParams.takeProfitPercent}}",
+    "riskRewardRatio": "{{tradeParams.riskRewardRatio}}",
+    "quantity": "{{tradeParams.quantity}}",
+    "positionSizeUSDT": "{{tradeParams.positionSizeUSDT}}",
+    "riskAmount": "{{tradeParams.riskAmount}}",
+    "potentialProfit": "{{tradeParams.potentialProfit}}",
+    "riskValid": "{{riskValidation.valid}}",
+    "riskReasons": "{{riskValidation.reasons.join('; ')}}"
+  },
+  "exampleResponse": {
+    "event": "message",
+    "task_id": "c3800678-a077-43df-a102-53f23ed20b88",
+    "message_id": "9da23599-e713-473b-982c-4328d4f5c78a",
+    "conversation_id": "45701982-8118-4bc5-8e9b-64562b4555f2",
+    "mode": "chat",
+    "answer": "**Analysis:** The bullish signal shows strong technical confirmation with EMA9 crossing above EMA21 and RSI at 58 (neutral-bullish zone). The 1:2 risk/reward ratio is favorable with a tight 2.3% stop-loss. However, the lack of strong candle patterns suggests moderate momentum. The risk parameters are well-validated with acceptable exposure.\n\n**Recommendation:** EXECUTE with slight adjustment - consider moving stop-loss to 0.4850 (below recent swing low) for better protection. Confidence: 7/10. This is a textbook trend-following setup with controlled risk.",
+    "metadata": {
+      "usage": {
+        "prompt_tokens": 450,
+        "completion_tokens": 120,
+        "total_tokens": 570
+      }
+    },
+    "created_at": 1705407629
+  },
+  "usage": {
+    "notes": [
+      "Replace variables in curly braces with actual values from strategy analysis",
+      "Use 'blocking' mode for synchronous responses (max 100s)",
+      "Use 'streaming' mode for real-time token streaming via SSE",
+      "Conversation_id can be left empty for new conversations",
+      "User field should be a unique identifier for tracking",
+      "Store conversation_id to continue multi-turn conversations"
+    ],
+    "integration": "This template should be used after receiving signal data from the strategy.analyzeMarket() and risk.calculateDynamicRisk() modules"
+  }
+}
