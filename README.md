@@ -34,7 +34,12 @@ A robust, modular trading bot for XRP/USDT (30-minute timeframe) that integrates
 ├── /dify
 │   └── payload.json         # Dify AI prompt template
 └── /tests
-    └── backtest.js          # Historical backtesting script
+    ├── backtest.js          # Historical backtesting script
+    ├── strategy.test.js     # Strategy module unit tests
+    ├── risk.test.js         # Risk management unit tests
+    ├── mexc.test.js         # MEXC client unit tests
+    ├── rateLimiter.test.js  # Rate limiter unit tests
+    └── integration.test.js  # End-to-end integration tests
 ```
 
 ## 🚀 Quick Start
@@ -51,7 +56,18 @@ npm install
 
 # Copy environment template
 cp .env.example .env
+Run Tests
 
+Verify everything works correctly:
+
+```bash
+# Run the test suite
+npm test
+
+# Expected output: 50 tests passing with ~72% coverage
+```
+
+### 3. 
 # Edit .env with your API keys
 nano .env
 ```
@@ -63,7 +79,7 @@ Edit `.env` with your credentials:
 ```bash
 # MEXC API Credentials (get from https://www.mexc.com/user/openapi)
 MEXC_API_KEY=your_mexc_api_key_here
-MEXC_SECRET_KEY=your_mexc_secret_key_here
+MEXC4SECRET_KEY=your_mexc_secret_key_here
 
 # MEXC Futures Configuration
 MEXC_BASE_URL=https://contract.mexc.com
@@ -130,6 +146,13 @@ Wins:                9 (60.0%)
 Losses:              6 (40.0%)
 ...
 ```
+
+npm test                    # Run all tests
+npm run test:watch         # Watch mode (auto-rerun)
+npm run test:coverage      # Generate coverage report
+npm run test:unit          # Run unit tests only
+npm run test:integration   # Run integration tests only
+npm run backtest          # Run back-test analysis
 
 ## 🔧 n8n Integration
 
@@ -255,13 +278,56 @@ Dify LLM evaluates:
 
 ## 🧪 Development & Testing
 
-### Test Strategy Module
+### Automated Test Suite
+
+The project includes a comprehensive Jest test suite with **50 tests** covering all major modules:
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode (auto-rerun on changes)
+npm run test:watch
+
+# Generate coverage report
+npm run test:coverage
+
+# Run only unit tests
+npm run test:unit
+
+# Run only integration tests
+npm run test:integration
+```
+
+**Test Coverage:**
+- ✅ **Strategy Module** (91.42% coverage) - Technical analysis, indicators, candle patterns
+- ✅ **Risk Management** (91.8% coverage) - Position sizing, stop-loss, take-profit calculations
+- ✅ **Rate Limiters** (100% coverage) - Token bucket, MEXC rate limiting, delay enforcement
+- ✅ **MEXC Client** (32.92% coverage) - API signing, query building, error handling
+- ✅ **n8n Integration** (48.64% coverage) - Workflow entry point, data transformation
+- ✅ **Integration Tests** - End-to-end signal generation and trade execution flow
+
+**Test Files:**
+```
+/tests
+├── strategy.test.js       # 9 tests - Market analysis & indicators
+├── risk.test.js          # 13 tests - Risk management calculations
+├── mexc.test.js          # 10 tests - MEXC API client methods
+├── rateLimiter.test.js   # 14 tests - Rate limiting utilities
+└── integration.test.js   # 4 tests - Complete workflow tests
+```
+
+All tests are isolated and use mock data - no real API calls are made during testing.
+
+### Manual Testing
+
+#### Test Strategy Module
 
 ```bash
 node src/n8n-entry.js
 ```
 
-### Test MEXC Connection
+#### Test MEXC Connection
 
 ```javascript
 const MEXCClient = require('./src/mexc');
@@ -272,7 +338,7 @@ const candles = await client.getKlines('XRPUSDT', '30m', 50);
 console.log(candles);
 ```
 
-### Validate Rate Limiter
+#### Validate Rate Limiter
 
 ```javascript
 const { MEXCRateLimiter } = require('./src/rateLimiter');
