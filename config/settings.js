@@ -3,7 +3,7 @@ require('dotenv').config();
 module.exports = {
   // Trading Configuration
   trading: {
-    symbol: process.env.TRADING_SYMBOL || 'XRPUSDT',
+    symbol: process.env.TRADING_SYMBOL || 'XRP_USDT',
     interval: process.env.TRADING_INTERVAL || '30m',
     positionSizeUSDT: parseFloat(process.env.POSITION_SIZE_USDT || '100')
   },
@@ -33,12 +33,15 @@ module.exports = {
     minCandles: parseInt(process.env.MIN_CANDLES || '21') // Minimum candles for analysis
   },
 
-  // MEXC API Configuration
+  // MEXC Futures API Configuration
   mexc: {
     apiKey: process.env.MEXC_API_KEY,
     secretKey: process.env.MEXC_SECRET_KEY,
-    baseURL: process.env.MEXC_BASE_URL || 'https://api.mexc.com',
-    timeout: parseInt(process.env.MEXC_TIMEOUT || '10000') // 10 seconds
+    baseURL: process.env.MEXC_BASE_URL || 'https://contract.mexc.com',
+    timeout: parseInt(process.env.MEXC_TIMEOUT || '10000'), // 10 seconds
+    tradingMode: 'futures', // Futures only (no spot trading)
+    leverage: parseInt(process.env.MEXC_LEVERAGE || '10'), // 10x leverage
+    positionMode: process.env.MEXC_POSITION_MODE || 'isolated' // isolated or cross
   },
 
   // Dify AI Configuration

@@ -74,10 +74,16 @@ function calculateDynamicRisk(signal, candles, entryPrice = null, positionSizeUS
       };
     }
 
-    // Calculate position size (quantity of XRP for 100 USDT)
-    const quantity = positionSizeUSDT / entry;
+    // Calculate position size for FUTURES with 10x leverage
+    // With 10x leverage, 100 USDT position size = 1000 USDT notional value
+    const leverage = 10;
+    const notionalValue = positionSizeUSDT * leverage; // 100 USDT * 10 = 1000 USDT notional
+    const quantity = notionalValue / entry; // Contracts = Notional / Price
+    
+    // Margin required (actual USDT at risk)
+    const marginRequired = positionSizeUSDT;
 
-    // Calculate risk and profit in USDT
+    // Calculate risk and profit in USDT (based on full notional position)
     const riskPerUnit = Math.abs(entry - stopLoss);
     const profitPerUnit = Math.abs(takeProfit - entry);
     const riskAmount = riskPerUnit * quantity;
@@ -91,7 +97,11 @@ function calculateDynamicRisk(signal, candles, entryPrice = null, positionSizeUS
       stopLoss: parseFloat(stopLoss.toFixed(6)),
       takeProfit: parseFloat(takeProfit.toFixed(6)),
       quantity: parseFloat(quantity.toFixed(4)),
+      contracts: Math.floor(quantity), // Integer contracts for futures
       positionSizeUSDT,
+      leverage: leverage,
+      marginRequired: parseFloat(marginRequired.toFixed(2)),
+      notionalValue: parseFloat(notionalValue.toFixed(2)),
       riskRewardRatio: parseFloat(riskRewardRatio.toFixed(2)),
       riskAmount: parseFloat(riskAmount.toFixed(2)),
       potentialProfit: parseFloat(potentialProfit.toFixed(2)),

@@ -2,15 +2,17 @@ const axios = require('axios');
 const crypto = require('crypto');
 
 /**
- * MEXC V3 Spot API Integration
- * Provides methods for fetching market data and placing orders
+ * MEXC Futures (Perpetual Contract) API Integration
+ * Provides methods for fetching market data and placing leveraged orders
+ * Trading Mode: Futures Only (10x Leverage, Isolated Margin)
  */
 
 class MEXCClient {
-  constructor(apiKey, secretKey) {
+  constructor(apiKey, secretKey, leverage = 10) {
     this.apiKey = apiKey;
     this.secretKey = secretKey;
-    this.baseURL = 'https://api.mexc.com';
+    this.baseURL = 'https://contract.mexc.com';
+    this.leverage = leverage;
   }
 
   /**
@@ -40,54 +42,59 @@ class MEXCClient {
   }
 
   /**
-   * Fetches candlestick/kline data from MEXC
-   * @param {string} symbol - Trading pair (e.g., 'XRPUSDT')
-   * @param {string} interval - Time interval (e.g., '30m', '1h', '1d')
-   * @param {number} limit - Number of candles to fetch (default: 100, max: 1000)
-   * @param {number} startTime - Start time in milliseconds (optional)
-   * @param {number} endTime - End time in milliseconds (optional)
+   * Fetches candlestick/kline data from MEXC Futures
+   * @param {string} symbol - Trading pair in futures format (e.g., 'XRP_USDT')
+   * @param {string} interval - Time interval (e.g., 'Min30', 'Min60', 'Day1')
+   * @param {number} limit - Number of candles to fetch (default: 100, max: 2000)
+   * @param {number} startTime - Start time in seconds (optional)
+   * @param {number} endTime - End time in seconds (optional)
    * @returns {Promise<Array>} Array of candles [{timestamp, open, high, low, close, volume}]
    */
-  async getKlines(symbol, interval = '30m', limit = 100, startTime = null, endTime = null) {
+  async getKlines(symbol, interval = 'Min30', limit = 100, startTime = null, endTime = null) {
     try {
+      // Convert spot symbol format to futures format if needed
+      const futuresSymbol = symbol.includes('_') ? symbol : symbol.replace(/USDT$/, '_USDT');
+      
+      // Convert interval format: '30m' -> 'Min30', '1h' -> 'Min60', '1d' -> 'Day1'
+      const futuresInterval = this.convertIntervalToFutures(interval);
+      
       const params = {
-        symbol: symbol.toUpperCase(),
-        interval,
+        symbol: futuresSymbol,
+        interval: futuresInterval,
         limit
       };
 
-      if (startTime) params.startTime = startTime;
-      if (endTime) params.endTime = endTime;
+      if (startTime) params.start = Math.floor(startTime / 1000); // Convert ms to seconds
+      if (endTime) params.end = Math.floor(endTime / 1000);
 
       const queryString = this.buildQueryString(params);
-      const url = `${this.baseURL}/api/v3/klines?${queryString}`;
+      const url = `${this.baseURL}/api/v1/contract/kline/${futuresSymbol}?${queryString}`;
 
-      console.log(`[MEXC] Fetching klines: ${symbol} ${interval} (limit: ${limit})`);
+      console.log(`[MEXC Futures] Fetching klines: ${futuresSymbol} ${futuresInterval} (limit: ${limit})`);
 
       const response = await axios.get(url, {
         headers: {
-          'Content-Type': 'application/json',
-          'X-MEXC-APIKEY': this.apiKey
+          'Content-Type': 'application/json'
         },
         timeout: 10000
       });
 
-      // Transform MEXC response format to standard OHLCV
-      const candles = response.data.map(candle => ({
-        timestamp: new Date(candle[0]).toISOString(),
-        timestampMs: candle[0],
-        open: parseFloat(candle[1]),
-        high: parseFloat(candle[2]),
-        low: parseFloat(candle[3]),
-        close: parseFloat(candle[4]),
-        volume: parseFloat(candle[5])
+      // Transform MEXC Futures response format to standard OHLCV
+      const candles = response.data.data.map(candle => ({
+        timestamp: new Date(candle.time * 1000).toISOString(),
+        timestampMs: candle.time * 1000,
+        open: parseFloat(candle.open),
+        high: parseFloat(candle.high),
+        low: parseFloat(candle.low),
+        close: parseFloat(candle.close),
+        volume: parseFloat(candle.vol)
       }));
 
-      console.log(`[MEXC] Successfully fetched ${candles.length} candles`);
+      console.log(`[MEXC Futures] Successfully fetched ${candles.length} candles`);
       return candles;
 
     } catch (error) {
-      console.error('[MEXC] Error fetching klines:', {
+      console.error('[MEXC Futures] Error fetching klines:', {
         message: error.message,
         response: error.response?.data,
         status: error.response?.status
@@ -97,74 +104,116 @@ class MEXCClient {
   }
 
   /**
-   * Places a market or limit order on MEXC
-   * @param {string} symbol - Trading pair (e.g., 'XRPUSDT')
-   * @param {string} side - Order side ('BUY' or 'SELL')
-   * @param {number} quantity - Order quantity (base asset amount)
+   * Converts spot interval format to futures interval format
+   * @param {string} interval - Spot interval (e.g., '30m', '1h', '1d')
+   * @returns {string} Futures interval (e.g., 'Min30', 'Min60', 'Day1')
+   */
+  convertIntervalToFutures(interval) {
+    const mapping = {
+      '1m': 'Min1', '5m': 'Min5', '15m': 'Min15', '30m': 'Min30',
+      '1h': 'Min60', '4h': 'Hour4', '8h': 'Hour8',
+      '1d': 'Day1', '1w': 'Week1', '1M': 'Month1'
+    };
+    return mapping[interval] || interval;
+  }
+
+  /**
+   * Places a futures order on MEXC (10x Isolated Margin)
+   * @param {string} symbol - Trading pair in futures format (e.g., 'XRP_USDT')
+   * @param {string} side - Position side ('LONG' or 'SHORT')
+   * @param {number} quantity - Contract quantity (leverage-adjusted)
    * @param {string} type - Order type ('MARKET' or 'LIMIT', default: 'MARKET')
    * @param {number} price - Limit price (required for LIMIT orders)
+   * @param {boolean} isOpen - True to open position, false to close (default: true)
    * @returns {Promise<Object>} Order response
    */
-  async placeOrder(symbol, side, quantity, type = 'MARKET', price = null) {
+  async placeOrder(symbol, side, quantity, type = 'MARKET', price = null, isOpen = true) {
     try {
+      // Convert spot symbol format to futures format if needed
+      const futuresSymbol = symbol.includes('_') ? symbol : symbol.replace(/USDT$/, '_USDT');
+      
+      // Convert side to futures order side codes:
+      // 1 = Open Long, 2 = Close Short, 3 = Open Short, 4 = Close Long
+      let orderSide;
+      if (side.toUpperCase() === 'LONG' || side.toUpperCase() === 'BUY') {
+        orderSide = isOpen ? 1 : 4; // 1 = Open Long, 4 = Close Long
+      } else if (side.toUpperCase() === 'SHORT' || side.toUpperCase() === 'SELL') {
+        orderSide = isOpen ? 3 : 2; // 3 = Open Short, 2 = Close Short
+      } else {
+        throw new Error(`Invalid side: ${side}. Use LONG/BUY or SHORT/SELL`);
+      }
+
+      // Convert order type: 5 = MARKET, 6 = LIMIT
+      const orderType = type.toUpperCase() === 'MARKET' ? 5 : 6;
+
       const timestamp = Date.now();
-      const params = {
-        symbol: symbol.toUpperCase(),
-        side: side.toUpperCase(),
-        type: type.toUpperCase(),
-        quantity: quantity.toString(),
+      const externalOid = `sentinel-${timestamp}`;
+
+      const orderData = {
+        symbol: futuresSymbol,
+        side: orderSide,
+        type: orderType,
+        vol: Math.floor(quantity), // Must be integer contract count
+        openType: 1, // 1 = Isolated margin
+        leverage: this.leverage,
+        externalOid: externalOid,
         timestamp
       };
 
       // Add price for limit orders
-      if (type.toUpperCase() === 'LIMIT') {
+      if (orderType === 6) {
         if (!price) {
           throw new Error('Price is required for LIMIT orders');
         }
-        params.price = price.toString();
-        params.timeInForce = 'GTC'; // Good Till Cancel
+        orderData.price = price;
       }
 
-      // Build query string and generate signature
-      const queryString = this.buildQueryString(params);
-      const signature = this.generateSignature(queryString);
-      const signedQueryString = `${queryString}&signature=${signature}`;
+      // Generate signature for futures API
+      const params = Object.keys(orderData)
+        .sort()
+        .map(key => `${key}=${orderData[key]}`)
+        .join('&');
+      const signature = this.generateSignature(params);
 
-      const url = `${this.baseURL}/api/v3/order?${signedQueryString}`;
+      const url = `${this.baseURL}/api/v1/private/order/submit`;
 
-      console.log(`[MEXC] Placing ${type} ${side} order: ${quantity} ${symbol}`);
+      const sideText = orderSide === 1 ? 'OPEN_LONG' : orderSide === 2 ? 'CLOSE_SHORT' : orderSide === 3 ? 'OPEN_SHORT' : 'CLOSE_LONG';
+      console.log(`[MEXC Futures] Placing ${type} ${sideText} order: ${quantity} contracts ${futuresSymbol} @${this.leverage}x`);
 
-      const response = await axios.post(url, null, {
+      const response = await axios.post(url, orderData, {
         headers: {
           'Content-Type': 'application/json',
-          'X-MEXC-APIKEY': this.apiKey
+          'X-MEXC-APIKEY': this.apiKey,
+          'Request-Time': timestamp.toString(),
+          'Signature': signature
         },
         timeout: 10000
       });
 
-      console.log('[MEXC] Order placed successfully:', {
-        orderId: response.data.orderId,
-        symbol: response.data.symbol,
-        side: response.data.side,
-        type: response.data.type,
-        quantity: response.data.origQty,
-        price: response.data.price
+      console.log('[MEXC Futures] Order placed successfully:', {
+        orderId: response.data.data,
+        symbol: futuresSymbol,
+        side: sideText,
+        type: type,
+        contracts: quantity,
+        leverage: this.leverage
       });
 
       return {
         success: true,
-        orderId: response.data.orderId,
-        symbol: response.data.symbol,
-        side: response.data.side,
-        type: response.data.type,
-        quantity: parseFloat(response.data.origQty),
-        price: parseFloat(response.data.price || 0),
-        transactTime: new Date(response.data.transactTime).toISOString(),
+        orderId: response.data.data,
+        symbol: futuresSymbol,
+        side: sideText,
+        type: type,
+        contracts: quantity,
+        leverage: this.leverage,
+        openType: 'isolated',
+        transactTime: new Date(timestamp).toISOString(),
         rawResponse: response.data
       };
 
     } catch (error) {
-      console.error('[MEXC] Error placing order:', {
+      console.error('[MEXC Futures] Error placing order:', {
         message: error.message,
         response: error.response?.data,
         status: error.response?.status,
@@ -181,33 +230,32 @@ class MEXCClient {
   }
 
   /**
-   * Gets account information including balances
-   * @returns {Promise<Object>} Account data
+   * Gets futures account information including balances and positions
+   * @returns {Promise<Object>} Futures account data
    */
   async getAccountInfo() {
     try {
       const timestamp = Date.now();
-      const params = { timestamp };
+      const signature = this.generateSignature(`timestamp=${timestamp}`);
 
-      const queryString = this.buildQueryString(params);
-      const signature = this.generateSignature(queryString);
-      const signedQueryString = `${queryString}&signature=${signature}`;
-
-      const url = `${this.baseURL}/api/v3/account?${signedQueryString}`;
+      const url = `${this.baseURL}/api/v1/private/account/assets`;
 
       const response = await axios.get(url, {
         headers: {
           'Content-Type': 'application/json',
-          'X-MEXC-APIKEY': this.apiKey
+          'X-MEXC-APIKEY': this.apiKey,
+          'Request-Time': timestamp.toString(),
+          'Signature': signature
         },
+        params: { timestamp },
         timeout: 10000
       });
 
-      console.log('[MEXC] Account info retrieved successfully');
+      console.log('[MEXC Futures] Account info retrieved successfully');
       return response.data;
 
     } catch (error) {
-      console.error('[MEXC] Error fetching account info:', {
+      console.error('[MEXC Futures] Error fetching account info:', {
         message: error.message,
         response: error.response?.data
       });
@@ -256,22 +304,25 @@ class MEXCClient {
   }
 
   /**
-   * Gets current ticker price
-   * @param {string} symbol - Trading pair
+   * Gets current futures ticker price
+   * @param {string} symbol - Trading pair in futures format (e.g., 'XRP_USDT')
    * @returns {Promise<number>} Current price
    */
   async getCurrentPrice(symbol) {
     try {
-      const url = `${this.baseURL}/api/v3/ticker/price?symbol=${symbol.toUpperCase()}`;
+      // Convert spot symbol format to futures format if needed
+      const futuresSymbol = symbol.includes('_') ? symbol : symbol.replace(/USDT$/, '_USDT');
+      
+      const url = `${this.baseURL}/api/v1/contract/ticker?symbol=${futuresSymbol}`;
 
       const response = await axios.get(url, {
         timeout: 10000
       });
 
-      return parseFloat(response.data.price);
+      return parseFloat(response.data.data[0].lastPrice);
 
     } catch (error) {
-      console.error('[MEXC] Error fetching current price:', error.message);
+      console.error('[MEXC Futures] Error fetching current price:', error.message);
       throw new Error(`Failed to fetch current price: ${error.message}`);
     }
   }

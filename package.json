@@ -4,7 +4,11 @@
   "description": "Modular XRP/USDT trading bot integrating Node.js, n8n, and Dify.ai",
   "main": "src/n8n-entry.js",
   "scripts": {
-    "test": "node tests/backtest.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest tests/*.test.js",
+    "test:integration": "jest tests/integration.test.js",
     "backtest": "node tests/backtest.js",
     "start": "node src/n8n-entry.js"
   },
@@ -25,7 +29,9 @@
     "dotenv": "^16.3.1",
     "technicalindicators": "^3.1.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "jest": "^30.2.0"
+  },
   "engines": {
     "node": ">=16.0.0"
   }

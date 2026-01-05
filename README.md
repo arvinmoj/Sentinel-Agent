@@ -6,7 +6,8 @@ A robust, modular trading bot for XRP/USDT (30-minute timeframe) that integrates
 
 - **Technical Strategy**: EMA(9), EMA(21), and RSI(14) indicators with refined entry logic
 - **Dynamic Risk Management**: Calculates stop-loss from 5-candle lows/highs with 1:2 risk/reward ratio
-- **MEXC V3 API Integration**: HMAC-SHA256 authenticated requests for klines and order placement
+- **MEXC Futures API Integration**: 10x leveraged trading with isolated margin on perpetual contracts
+- **Futures-Only Mode**: Long/short positions with automatic contract quantity calculation
 - **Rate Limiting**: Token bucket implementation respecting MEXC weight-based limits
 - **n8n Compatibility**: Pre-built workflow JSON and Code Node wrapper
 - **Dify AI Analysis**: LLM-powered trade signal validation
@@ -64,11 +65,16 @@ Edit `.env` with your credentials:
 MEXC_API_KEY=your_mexc_api_key_here
 MEXC_SECRET_KEY=your_mexc_secret_key_here
 
+# MEXC Futures Configuration
+MEXC_BASE_URL=https://contract.mexc.com
+MEXC_LEVERAGE=10
+MEXC_POSITION_MODE=isolated
+
 # Dify AI API Key (get from https://dify.ai)
 DIFY_API_KEY=your_dify_api_key_here
 
-# Trading Configuration
-TRADING_SYMBOL=XRPUSDT
+# Trading Configuration (Futures Format)
+TRADING_SYMBOL=XRP_USDT
 TRADING_INTERVAL=30m
 POSITION_SIZE_USDT=100
 ```

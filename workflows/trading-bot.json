@@ -21,17 +21,17 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.mexc.com/api/v3/klines",
+        "url": "https://contract.mexc.com/api/v1/contract/kline/XRP_USDT",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
               "name": "symbol",
-              "value": "XRPUSDT"
+              "value": "XRP_USDT"
             },
             {
               "name": "interval",
-              "value": "30m"
+              "value": "Min30"
             },
             {
               "name": "limit",
@@ -42,7 +42,7 @@
         "options": {}
       },
       "id": "fetch-klines",
-      "name": "Fetch MEXC Klines",
+      "name": "Fetch MEXC Futures Klines",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [450, 300]
@@ -161,33 +161,41 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.mexc.com/api/v3/order",
-        "sendQuery": true,
-        "queryParameters": {
+        "url": "https://contract.mexc.com/api/v1/private/order/submit",
+        "sendBody": true,
+        "bodyParameters": {
           "parameters": [
             {
               "name": "symbol",
-              "value": "XRPUSDT"
+              "value": "XRP_USDT"
             },
             {
               "name": "side",
-              "value": "={{ $('Analyze Strategy').item.json.signal }}"
+              "value": "={{ $('Analyze Strategy').item.json.signal === 'BUY' ? 1 : 3 }}"
             },
             {
               "name": "type",
-              "value": "MARKET"
+              "value": "5"
             },
             {
-              "name": "quantity",
-              "value": "={{ $('Analyze Strategy').item.json.tradeParams.quantity }}"
+              "name": "vol",
+              "value": "={{ Math.floor($('Analyze Strategy').item.json.tradeParams.contracts) }}"
+            },
+            {
+              "name": "openType",
+              "value": "1"
+            },
+            {
+              "name": "leverage",
+              "value": "10"
+            },
+            {
+              "name": "externalOid",
+              "value": "={{ 'sentinel-' + Date.now() }}"
             },
             {
               "name": "timestamp",
               "value": "={{ Date.now() }}"
-            },
-            {
-              "name": "signature",
-              "value": "={{ $jmespath($item(0).json, \"signature\") }}"
             }
           ]
         },
@@ -201,13 +209,21 @@
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "Request-Time",
+              "value": "={{ Date.now().toString() }}"
+            },
+            {
+              "name": "Signature",
+              "value": "={{ $jmespath($item(0).json, \"signature\") }}"
             }
           ]
         },
         "options": {}
       },
       "id": "place-order",
-      "name": "Place MEXC Order",
+      "name": "Place MEXC Futures Order",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [1450, 200]
